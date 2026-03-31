@@ -65,6 +65,13 @@ func TestClaimsHasRoleUsesRealmAccessForSubadmin(t *testing.T) {
 	}
 }
 
+func TestMiddlewareForAnyRoleAcceptsSubadmin(t *testing.T) {
+	auth := &KeycloakAuth{}
+	if auth.MiddlewareForAnyRole("cloud-admin", "subadmin") == nil {
+		t.Fatal("expected middleware to be created")
+	}
+}
+
 func jwkJSON(key *rsa.PrivateKey) string {
 	return fmt.Sprintf(
 		`{"kty":"RSA","kid":"test-key","use":"sig","alg":"RS256","n":"%s","e":"%s"}`,

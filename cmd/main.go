@@ -2,25 +2,51 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"ecommercc/internal/auth"
+	"ecommercc/internal/country"
+	"ecommercc/internal/config"
 	"ecommercc/internal/product"
+	"ecommercc/internal/userdetail"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 const serverAddr = ":8081"
 
 func main() {
 	loadEnvFile(".env")
+	loadEnvFile("db.properties")
 
-	productService := product.NewService()
+	db, err := openDatabase()
+	if err != nil {
+		log.Fatalf("database: %v", err)
+	}
+	defer db.Close()
+
+	if err := ensureProductSchema(db); err != nil {
+		log.Fatalf("database schema: %v", err)
+	}
+	if err := userdetail.EnsureSchema(db); err != nil {
+		log.Fatalf("database schema: %v", err)
+	}
+	if err := country.EnsureSchema(db); err != nil {
+		log.Fatalf("database schema: %v", err)
+	}
+
+	productService := product.NewService(db)
 	productHandler := product.NewHandler(productService)
+	userDetailRepo := userdetail.NewRepository(db)
+	userDetailHandler := userdetail.NewHandler(userDetailRepo)
+	countryRepo := country.NewRepository(db)
+	countryHandler := country.NewHandler(countryRepo)
 
 	keycloakAuth, err := auth.NewKeycloakAuth(auth.KeycloakConfig{
 		Issuer:   os.Getenv("KEYCLOAK_ISSUER"),
@@ -34,7 +60,10 @@ func main() {
 	r := buildRouter(
 		keycloakAuth.MiddlewareForRole("cloud-admin"),
 		keycloakAuth.MiddlewareForRole("subadmin"),
+		keycloakAuth.MiddlewareForAnyRole("cloud-admin", "subadmin"),
 		productHandler,
+		userDetailHandler,
+		countryHandler,
 	)
 
 	server := &http.Server{
@@ -69,34 +98,79 @@ func main() {
 }
 
 func loadEnvFile(path string) {
-	data, err := os.ReadFile(path)
+	_ = config.LoadPropertiesFile(path)
+}
+
+func openDatabase() (*sql.DB, error) {
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
+	port := os.Getenv("DB_PORT")
+	if port == "" {
+		port = "3306"
+	}
+
+	name := os.Getenv("DB_NAME")
+	if name == "" {
+		name = "cloud7"
+	}
+
+	user := os.Getenv("DB_USER")
+	if user == "" {
+		user = "root"
+	}
+
+	password := os.Getenv("DB_PASSWORD")
+
+	dsn := user + ":" + password + "@tcp(" + host + ":" + port + ")/" + name + "?parseTime=true"
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	for _, rawLine := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(10)
 
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		value = strings.Trim(value, `"'`)
-
-		if key == "" {
-			continue
-		}
-
-		if _, exists := os.LookupEnv(key); exists {
-			continue
-		}
-
-		_ = os.Setenv(key, value)
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
 	}
+
+	log.Printf("database connected: host=%s port=%s name=%s user=%s", host, port, name, user)
+
+	return db, nil
+}
+
+func ensureProductSchema(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS products (
+			id BIGINT PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			description VARCHAR(255) NOT NULL,
+			price_cents BIGINT NOT NULL
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM products`).Scan(&count); err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO products (id, name, description, price_cents) VALUES
+		(1, 'Sample Product', 'Static product record', 1999),
+		(2, 'Second Product', 'Another static record', 2999),
+		(3, 'Third Product', 'Third static record', 3999)
+	`)
+	return err
 }

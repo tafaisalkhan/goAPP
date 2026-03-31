@@ -96,6 +96,10 @@ func (a *KeycloakAuth) Middleware(next http.Handler) http.Handler {
 }
 
 func (a *KeycloakAuth) MiddlewareForRole(role string) func(http.Handler) http.Handler {
+	return a.MiddlewareForAnyRole(role)
+}
+
+func (a *KeycloakAuth) MiddlewareForAnyRole(roles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, err := bearerToken(r.Header.Get("Authorization"))
@@ -115,12 +119,19 @@ func (a *KeycloakAuth) MiddlewareForRole(role string) func(http.Handler) http.Ha
 				return
 			}
 
-			if !claimsHasRole(claims, role, a.cfg.Audience) {
-				writeAuthError(w, http.StatusForbidden, role+" role is required")
+			for _, role := range roles {
+				if claimsHasRole(claims, role, a.cfg.Audience) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			if len(roles) == 1 {
+				writeAuthError(w, http.StatusForbidden, roles[0]+" role is required")
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			writeAuthError(w, http.StatusForbidden, "required role is missing")
 		})
 	}
 }

@@ -21,8 +21,16 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	products, err := h.service.List(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load products",
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string][]Product{
-		"products": h.service.List(),
+		"products": products,
 	})
 }
 
