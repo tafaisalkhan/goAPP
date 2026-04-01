@@ -46,7 +46,8 @@ func main() {
 	userDetailRepo := userdetail.NewRepository(db)
 	userDetailHandler := userdetail.NewHandler(userDetailRepo)
 	countryRepo := country.NewRepository(db)
-	countryHandler := country.NewHandler(countryRepo)
+	countryService := country.NewService(countryRepo)
+	countryHandler := country.NewHandler(countryService)
 
 	keycloakAuth, err := auth.NewKeycloakAuth(auth.KeycloakConfig{
 		Issuer:   os.Getenv("KEYCLOAK_ISSUER"),

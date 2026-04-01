@@ -5,15 +5,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ecommercc/internal/product"
 	"ecommercc/internal/country"
+	"ecommercc/internal/product"
 	"ecommercc/internal/userdetail"
 )
 
 func TestBuildRouterKeepsRootPublicAndProductsProtected(t *testing.T) {
 	productHandler := product.NewHandler(product.NewService(nil))
 	userDetailHandler := userdetail.NewHandler(nil)
-	countryHandler := country.NewHandler(nil)
+	countryHandler := country.NewHandler(country.NewService(nil))
 
 	adminAuthCalled := false
 	subadminAuthCalled := false

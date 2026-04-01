@@ -11,15 +11,15 @@ import (
 )
 
 type Handler struct {
-	repo Repository
+	service Service
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+func NewHandler(service Service) *Handler {
+	return &Handler{service: service}
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	if h.repo == nil {
+	if h.service == nil {
 		writeError(w, http.StatusInternalServerError, "database connection is not configured")
 		return
 	}
@@ -30,7 +30,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset := (page - 1) * limit
-	items, total, err := h.repo.List(r.Context(), limit, offset)
+	items, total, err := h.service.List(r.Context(), limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load countries")
 		return
@@ -53,7 +53,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	if h.repo == nil {
+	if h.service == nil {
 		writeError(w, http.StatusInternalServerError, "database connection is not configured")
 		return
 	}
@@ -63,7 +63,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.repo.Get(r.Context(), id)
+	item, err := h.service.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "country not found")
@@ -77,7 +77,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	if h.repo == nil {
+	if h.service == nil {
 		writeError(w, http.StatusInternalServerError, "database connection is not configured")
 		return
 	}
@@ -92,7 +92,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.repo.Create(r.Context(), normalizeCountry(req))
+	item, err := h.service.Create(r.Context(), normalizeCountry(req))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create country")
 		return
@@ -102,7 +102,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	if h.repo == nil {
+	if h.service == nil {
 		writeError(w, http.StatusInternalServerError, "database connection is not configured")
 		return
 	}
@@ -123,7 +123,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.repo.Update(r.Context(), id, patch)
+	item, err := h.service.Update(r.Context(), id, patch)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "country not found")
@@ -137,7 +137,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	if h.repo == nil {
+	if h.service == nil {
 		writeError(w, http.StatusInternalServerError, "database connection is not configured")
 		return
 	}
@@ -147,7 +147,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "country not found")
 			return
