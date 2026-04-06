@@ -94,4 +94,12 @@ func TestBuildRouterKeepsRootPublicAndProductsProtected(t *testing.T) {
 	if countryRec.Code != http.StatusUnauthorized {
 		t.Fatalf("countries returned %d, want %d", countryRec.Code, http.StatusUnauthorized)
 	}
+
+	countiesReq := httptest.NewRequest(http.MethodGet, "/api/counties", nil)
+	countiesRec := httptest.NewRecorder()
+	router.ServeHTTP(countiesRec, countiesReq)
+
+	if countiesRec.Code != http.StatusUnauthorized {
+		t.Fatalf("counties returned %d, want %d", countiesRec.Code, http.StatusUnauthorized)
+	}
 }

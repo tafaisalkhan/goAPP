@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"ecommercc/internal/auth"
-	"ecommercc/internal/country"
 	"ecommercc/internal/config"
+	"ecommercc/internal/country"
 	"ecommercc/internal/product"
+	"ecommercc/internal/scheduler"
 	"ecommercc/internal/userdetail"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -48,6 +49,28 @@ func main() {
 	countryRepo := country.NewRepository(db)
 	countryService := country.NewService(countryRepo)
 	countryHandler := country.NewHandler(countryService)
+	jobScheduler := scheduler.New(log.Default())
+	
+	jobScheduler.Add("every-1-minute", time.Minute, func(context.Context) {
+		log.Println("running 1 minute scheduler job")
+	})
+	jobScheduler.Add("every-3-minute", 3*time.Minute, func(context.Context) {
+		log.Println("running 3 minute scheduler job")
+	})
+	jobScheduler.Add("every-5-minute", 5*time.Minute, func(context.Context) {
+		log.Println("running 5 minute scheduler job")
+	})
+	jobScheduler.Add("every-10-minute", 10*time.Minute, func(context.Context) {
+		log.Println("running 10 minute scheduler job")
+	})
+
+	jobScheduler.Add("every-1-second", 1*time.Second, func(context.Context) {
+		log.Println("running 1 second scheduler job")
+	})
+
+	jobScheduler.Add("every-5-second", 5*time.Second, func(context.Context) {
+		log.Println("running 5 second scheduler job")
+	})
 
 	keycloakAuth, err := auth.NewKeycloakAuth(auth.KeycloakConfig{
 		Issuer:   os.Getenv("KEYCLOAK_ISSUER"),
@@ -82,11 +105,15 @@ func main() {
 		}
 	}()
 
+	schedulerCtx, cancelScheduler := context.WithCancel(context.Background())
+	jobScheduler.Start(schedulerCtx)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
 	log.Println("shutting down server...")
+	cancelScheduler()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 )
@@ -65,16 +66,7 @@ func (r *MySQLRepository) Get(ctx context.Context, id int64) (Country, error) {
 		return Country{}, err
 	}
 
-	query := fmt.Sprintf("SELECT id, %s FROM country WHERE id = ?", strings.Join(quotedColumns(), ", "))
-	var item Country
-	if err := scanCountry(r.db.QueryRowContext(ctx, query, id), &item); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Country{}, ErrNotFound
-		}
-		return Country{}, err
-	}
-
-	return item, nil
+	return getCountryByID(ctx, r.db, id)
 }
 
 func (r *MySQLRepository) Create(ctx context.Context, req Country) (Country, error) {
@@ -82,12 +74,22 @@ func (r *MySQLRepository) Create(ctx context.Context, req Country) (Country, err
 		return Country{}, err
 	}
 
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Country{}, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
 	columns := quotedColumns()
 	placeholders := strings.TrimRight(strings.Repeat("?, ", len(columns)), ", ")
 	query := fmt.Sprintf("INSERT INTO country (%s) VALUES (%s)", strings.Join(columns, ", "), placeholders)
 
-	result, err := r.db.ExecContext(ctx, query, valuesFromCountry(req, false)...)
+	result, err := tx.ExecContext(ctx, query, valuesFromCountry(req, false)...)
 	if err != nil {
+		log.Printf("[DB_ERROR] operation=insert_country query=%s values=%v error=%v",
+			query, req, err)
 		return Country{}, err
 	}
 
@@ -96,7 +98,16 @@ func (r *MySQLRepository) Create(ctx context.Context, req Country) (Country, err
 		return Country{}, err
 	}
 
-	return r.Get(ctx, id)
+	item, err := getCountryByID(ctx, tx, id)
+	if err != nil {
+		return Country{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Country{}, err
+	}
+
+	return item, nil
 }
 
 func (r *MySQLRepository) Update(ctx context.Context, id int64, patch UpdatePatch) (Country, error) {
@@ -209,4 +220,21 @@ func scanCountry(scanner rowScanner, detail *Country) error {
 	}
 
 	return scanner.Scan(dests...)
+}
+
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func getCountryByID(ctx context.Context, querier rowQuerier, id int64) (Country, error) {
+	query := fmt.Sprintf("SELECT id, %s FROM country WHERE id = ?", strings.Join(quotedColumns(), ", "))
+	var item Country
+	if err := scanCountry(querier.QueryRowContext(ctx, query, id), &item); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Country{}, ErrNotFound
+		}
+		return Country{}, err
+	}
+
+	return item, nil
 }

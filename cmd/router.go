@@ -29,6 +29,7 @@ func buildRouter(adminAuthMiddleware middlewareFunc, subadminAuthMiddleware midd
 	registerUserDetailRoutes(r, userDetailAuthMiddleware, userDetailHandler, "/api/user-details")
 	registerUserDetailRoutes(r, userDetailAuthMiddleware, userDetailHandler, "/api/users-detail")
 	registerCountryRoutes(r, userDetailAuthMiddleware, countryHandler, "/api/countries")
+	registerCountryRoutes(r, userDetailAuthMiddleware, countryHandler, "/api/counties")
 
 	return r
 }
